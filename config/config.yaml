@@ -1,0 +1,24 @@
+# Project Config
+project_name: "EcoTracing"
+
+# Paths
+paths:
+raw_data: "data/raw"
+processed_data: "data/processed"
+models: "models"
+outputs: "outputs"
+
+# Data
+data:
+source: "google_cluster_trace"
+sample_size: 100000
+
+# Model
+model:
+type: "lightgbm"
+random_state: 42
+test_size: 0.2
+
+# Carbon
+carbon:
+emission_factor: 0.5 # kg CO2 per kWh (조정 필요)
