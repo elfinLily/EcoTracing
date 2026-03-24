@@ -140,11 +140,16 @@ with open("/content/config.yaml", "w") as f:
 
 ## Model Performance (Phase 1)
 
-| Metric | Value |
-|--------|-------|
-| RMSE | TBD |
-| MAE | TBD |
-| R2 | TBD |
+**Dataset**: Google Cluster Trace 2019 (19,523,808 samples)
+
+| Rank | Model | RMSE | R² | MAPE | Train Time |
+|------|-------|------|-----|------|------------|
+| 🥇 | **RandomForest** | 1.38e-05 | 0.99999 | 0.07% | 470s |
+| 🥈 | LightGBM | 3.42e-05 | 0.99997 | 0.15% | 42s |
+| 🥉 | CatBoost | 4.31e-05 | 0.99995 | 0.79% | 78s |
+| 4 | XGBoost | 5.67e-05 | 0.99992 | 2.78% | 66s |
+
+**Best Model**: RandomForest (highest R², lowest MAPE)
 
 ---
 
