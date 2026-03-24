@@ -1,0 +1,28 @@
+{
+  "model": "LightGBM",
+  "dataset": "Google Cluster Trace 2019",
+  "samples": {
+    "total": 10000,
+    "train": 40000,
+    "test": 10000
+  },
+  "metrics": {
+    "rmse": 3.9989805702788706e-05,
+    "mae": 2.9079680387921995e-05,
+    "r2": 0.9999503439638883,
+    "mape": 2.135570908988142
+  },
+  "feature_importance": {
+    "hour": 5,
+    "memory": 232,
+    "cpu": 1223,
+    "duration": 1540
+  },
+  "features": [
+    "cpu",
+    "memory",
+    "duration",
+    "hour"
+  ],
+  "target": "energy_kwh"
+}
