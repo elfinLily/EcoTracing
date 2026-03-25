@@ -5,7 +5,7 @@ project_name: "EcoTracing"
 paths:
   drive_data: "/content/drive/MyDrive/EcoTracing/data"
   raw_data: "raw"
-  processed_data: "processed"
+  processed_data: "data/processed"
   local_drive_data: "G:\\내 드라이브\\EcoTracing\\data"
   models: "models"
   outputs: "outputs"
@@ -20,6 +20,16 @@ model:
   type: "lightgbm"
   random_state: 42
   test_size: 0.2
+  model_names:
+    lightgbm: "energy_model_lightgbm.pkl"
+    xgboost: "energy_model_xgboost.pkl"
+    randomforest: "energy_model_randomforest.pkl"
+    catboost: "energy_model_catboost.pkl"
+  results:
+    metrics_csv: "phase1_metrics.csv"
+    results_json: "phase1_full_results.json"
+    feature_importance_csv: "feature_importance_comparison.csv"
+
 
 # Carbon
 carbon:

@@ -1,1 +1,62 @@
+# ==============================================
+# EcoTracing .gitignore
+# ==============================================
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Data (Google Drive에 저장 - 로컬에 안 올림)
+data/raw/
+data/processed/
 data/*
+
+# 모델 파일 (용량 크므로 제외)
+models/*.pkl
+models/*.joblib
+models/*.cbm
+
+# 결과 파일 (Drive에 저장)
+outputs/figures/
+outputs/reports/
+
+# 체크포인트
+checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Streamlit 캐시
+.streamlit/
+
+# 환경 변수
+.env
+*.env
+
+# 로그
+*.log
+logs/
