@@ -6,11 +6,12 @@
 #   - 직관적 비교 (LED 전구, 스마트폰 충전 등) 시각화
 # ============================================================
 
+from datetime import datetime
 import sys
 import os
 import streamlit as st
-from utils.loader import load_config, load_model
-from utils.predictor import calc_energy_by_formula, predict_energy_by_model, energy_to_analogy
+from utils.loader import load_config, load_model, load_best_model
+from utils.predictor import calc_energy_by_formula, predict_energy_by_model, energy_to_analogy 
 
 st.set_page_config(page_title="에너지 예측기 | EcoTracing", page_icon="🔋", layout="wide")
 
@@ -49,21 +50,33 @@ with st.sidebar:
         step=1,
         help="에너지를 측정할 시간(분)을 입력하세요"
     )
-    duration_sec = duration_min * 60   # 초 단위로 변환
+    # duration_sec = duration_min * 60   # 초 단위로 변환
 
-    hour = st.slider(
-        label="시간대 (0~23시)",
-        min_value=0,
-        max_value=23,
-        value=12,
-        step=1,
-        help="현재 시간대를 설정하세요"
+    duration_h = st.number_input(
+        label="측정 시간 (시간)",
+        min_value=0.1,
+        max_value=24.0,
+        value=1.0,
+        step=0.5,
+        help="에너지를 측정할 시간 (시간 단위)"
     )
 
+    # duration_sec = duration_h * 3600
+
+    # hour = st.slider(
+    #     label="시간대 (0~23시)",
+    #     min_value=0,
+    #     max_value=23,
+    #     value=12,
+    #     step=1,
+    #     help="현재 시간대를 설정하세요"
+    # )
+    
+    hour = datetime.now().hour
 # ----------------------------------------
 # 계산
 # ----------------------------------------
-formula_result = calc_energy_by_formula(cpu_usage, memory_usage, duration_sec, config)
+formula_result = calc_energy_by_formula(cpu_usage, memory_usage, duration_h, config)
 analogy = energy_to_analogy(formula_result["energy_kwh"])
 
 # ----------------------------------------
@@ -86,7 +99,7 @@ with col2:
     )
 with col3:
     st.metric(
-         label="🔋 에너지 소비량",
+        label="🔋 에너지 소비량",
         value=f"{formula_result['energy_kwh']:.6f} kWh",
     )
 with col4:
@@ -94,7 +107,7 @@ with col4:
         label="🌍 탄소 배출량",
         value=f"{formula_result['carbon_kg']:.6f} kg CO₂",
         help=f"emission_factor: {config['carbon']['emission_factor']} kg CO₂/kWh"
-)
+    )
 
 st.divider()
 
@@ -124,11 +137,12 @@ st.divider()
 st.markdown("### 🤖 모델 기반 예측")
 
 try:
-    model = load_model("energy_model_randomforest.pkl", config)
-    model_pred = predict_energy_by_model(model, cpu_usage, memory_usage, duration_sec, hour)
+    model = load_best_model(config)
+    model_pred = predict_energy_by_model(model, cpu_usage, memory_usage, duration_h, hour)
+    # model_pred = predict_energy_by_model(model, cpu_usage, memory_usage, duration_sec, hour)
 
     st.success(
-        f"**LightGBM 예측값**: `{model_pred:.8f} kWh`  "
+        f"**Best Model 예측값**: `{model_pred:.8f} kWh` "
         f"| **공식 계산값**: `{formula_result['energy_kwh']:.8f} kWh`"
     )
 
@@ -149,7 +163,7 @@ st.code(
     f"""
 CPU 사용률  : {cpu_usage*100:.0f}%  →  {cpu_usage}
 메모리 사용률: {memory_usage*100:.0f}%  →  {memory_usage}
-측정 시간   : {duration_min}분  →  {duration_sec}초  →  {formula_result['duration_h']:.6f}h
+측정 시간   : {duration_min}분  →   {formula_result['duration_h']:.6f}h
 
 전력 (W) = 200 + ({cpu_usage} x 300) + ({memory_usage} x 50)
               = 200 + {cpu_usage*300:.1f} + {memory_usage*50:.1f}
@@ -158,7 +172,7 @@ CPU 사용률  : {cpu_usage*100:.0f}%  →  {cpu_usage}
 에너지 (kWh) = {formula_result['power_w']} W x {formula_result['duration_h']:.6f} h / 1000
                      = {formula_result['energy_kwh']} kWh
 
-탄소 (kg CO₂) = {formula_result['energy_kwh']} kWh × {config['carbon']['emission_factor']}
+탄소 (kg CO₂) = {formula_result['energy_kwh']} kWh x {config['carbon']['emission_factor']}
                       = {formula_result['carbon_kg']} kg CO₂
     """,
     language="text"

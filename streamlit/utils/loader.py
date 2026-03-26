@@ -100,3 +100,20 @@ def load_feature_importance(config: dict) -> pd.DataFrame:
         raise FileNotFoundError(f"파일을 찾을 수 없어요: {fi_path}")
 
     return pd.read_csv(fi_path)
+
+def load_best_model(config: dict):
+    """
+    phase1_full_results.json의 best_model 키를 읽어
+    해당 모델 자동 로드
+
+    Args:
+        config: load_config()로 읽은 config 딕셔너리
+
+    Returns:
+        로드된 best 모델 객체
+    """
+    # results JSON에서 best_model 이름 읽기
+    results = load_phase1_results(config)
+    best_model_key = results["best_model"].lower()   # 예: "RandomForest" -> "randomforest"
+
+    return load_model(best_model_key, config)

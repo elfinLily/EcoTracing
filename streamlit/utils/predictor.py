@@ -1,10 +1,25 @@
+# ============================================================
+# [입력값 계산 방식]
+# RandomForest = 트리 기반 모델
+#   -> 학습 범위 밖 값 외삽 불가
+#   -> duration max = 300초이므로 3600초 넣어도 300초와 동일하게 예측
+#   -> 그래서 duration 얼마를 넣어도 예측값이 똑같이 나옴
+#   모델에는 duration=300 고정으로 넘기고
+#   사용자 입력 시간 비율로 스케일링
+
+#   예시) CPU=0.5, Mem=0.3, 1시간 입력
+#     모델 예측 (300초 기준) = 0.02290934 kWh
+#     scale_factor = 3600 / 300 = 12
+#     최종 예측 = 0.02290934 * 12 = 0.27491 kWh
+# ============================================================
 import numpy as np
 import pandas as pd
+TRAIN_DURATION_SEC = 300
 
 def calc_energy_by_formula(
     cpu_usage: float,
     memory_usage: float,
-    duration_sec: float,
+    duration_h: float,
     config: dict
 ) -> dict: 
     """
@@ -13,7 +28,7 @@ def calc_energy_by_formula(
     Args:
         cpu_usage   : CPU 사용률 (0.0 ~ 1.0)
         memory_usage : 메모리 사용률 (0.0 ~ 1.0)
-        duration_sec : 측정 시간 (초)
+        duration_h : 측정 시간 (시간)
         config  : load_config()로 읽은 config 딕셔너리
 
     Returns:
@@ -27,10 +42,7 @@ def calc_energy_by_formula(
     # 전력 계산 (W)
     power_w = 200 + (cpu_usage * 300) + (memory_usage * 50)
 
-    # 시간 변환 (초 → 시간)
-    duration_h = duration_sec / 3600
-
-    # 에너지 계산 (kWh)
+    # 에너지 계산(kWh)
     energy_kwh = power_w * duration_h / 1000
 
     # 탄소 배출량 계산 (kg CO2) — config의 emission_factor 사용
@@ -44,36 +56,34 @@ def calc_energy_by_formula(
         "carbon_kg": round(carbon_kg, 8),
     }
 
-def predict_energy_by_model(
-    model,
-    cpu_usage: float,
-    memory_usage: float,
-    duration_sec: float,
-    hour: int
-) -> float:
+def predict_energy_by_model(model, cpu_usage, memory_usage, duration_h, hour):
     """
     학습된 모델로 에너지 소비량 예측
 
     Args:
-        model  : load_model()로 불러온 sklearn/lgbm 모델
+        model : load_best_model()로 불러온 모델
         cpu_usage : CPU 사용률 (0.0 ~ 1.0)
         memory_usage : 메모리 사용률 (0.0 ~ 1.0)
-        duration_sec : 측정 시간 (초)
-        hour  : 시간대 (0 ~ 23)
+        duration_h  : 측정 시간 (시간) - UI 입력값
+        hour  : 현재 시간대 (0 ~ 23)
 
     Returns:
-        예측된 에너지 소비량 (kWh, float)
+        예측된 에너지 소비량 (kWh)
     """
-    # 모델 입력 피처 순서: [duration, cpu, memory, hour]
-    # Phase 1 학습 시 피처 순서와 반드시 일치해야 함
-    features = pd.DataFrame([{
-        "duration": duration_sec,
-        "cpu": cpu_usage,
-        "memory": memory_usage,
-        "hour": hour
-    }])
+    # 학습 데이터와 동일한 단위(초)로 변환해서 그대로 전달
+    # 모델이 이미 duration_sec 기반으로 energy_kwh를 학습했음
+    features = pd.DataFrame(
+        [[cpu_usage, memory_usage, TRAIN_DURATION_SEC, hour]],
+        columns=["cpu", "memory", "duration", "hour"]
+    )
 
-    prediction = model.predict(features)[0]
+    base_prediction = model.predict(features)[0]
+    # 사용자 입력 시간에 맞게 스케일링
+    # scale_factor = 실제 초 / 학습 기준 초
+    duration_sec = duration_h * 3600
+    scale_factor = duration_sec / TRAIN_DURATION_SEC
+    prediction = base_prediction * scale_factor
+
     return round(float(prediction), 8)
 
 def energy_to_analogy(energy_kwh: float) -> dict:
