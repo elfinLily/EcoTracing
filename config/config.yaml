@@ -9,6 +9,7 @@ paths:
   local_drive_data: "G:\\내 드라이브\\EcoTracing\\data"
   models: "models"
   outputs: "outputs"
+  processed_file: "instance_usage_full_processed.parquet"
 
 # Data
 data:
@@ -25,11 +26,20 @@ model:
     xgboost: "energy_model_xgboost.pkl"
     randomforest: "energy_model_randomforest.pkl"
     catboost: "energy_model_catboost.pkl"
+    linearregression: "energy_model_linearregression.pkl"
+    stacking_meta: "energy_model_stacking_meta.pkl"
+    mlp: "energy_model_mlp.pt"
+    scaler_x: "energy_scaler_x.pkl"
+    scaler_y: "energy_scaler_y.pkl"
+    rf_hourly: "energy_model_rf_hourly.pkl" 
+  best_model: "residual_learning"
+  features: ["cpu", "memory", "duration", "hour"]
   results:
     metrics_csv: "phase1_metrics.csv"
     results_json: "phase1_full_results.json"
     feature_importance_csv: "feature_importance_comparison.csv"
-
+    results_json_mlp: "phase1_full_results_mlp.json"
+    results_json_hourly: "phase1_results_hourly.json"
 
 # Carbon
 carbon:

@@ -31,7 +31,6 @@ def load_model(model_key: str, config: dict):
     """
     file_name = config["model"]["model_names"][model_key]
     model_path = os.path.join(config["paths"]["models"], file_name)
-
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"모델 파일을 찾을 수 없어요: {model_path}")
 
@@ -117,3 +116,68 @@ def load_best_model(config: dict):
     best_model_key = results["best_model"].lower()   # 예: "RandomForest" -> "randomforest"
 
     return load_model(best_model_key, config)
+
+def load_stacking_models(config: dict):
+    """  
+    Stacking 앙상블에 필요한 모델 3개 로드
+    (RF + LR 베이스 모델 + 메타 모델)
+
+    Args:
+        config: load_config()로 읽은 config 딕셔너리
+
+    Returns:
+        rf         : RandomForest 베이스 모델
+        lr         : LinearRegression 베이스 모델
+        meta_model : Stacking 메타 모델 (LinearRegression)
+    """
+    rf = load_model("randomforest", config)
+    lr = load_model("linearregression", config)
+    meta_model = load_model("stacking_meta", config)
+
+    return rf, lr, meta_model
+
+def load_dynamic_blending_models(config: dict):
+    """
+    Dynamic Weighted Blending에 필요한 모델 2개 로드
+    (RF + LR)
+
+    Args:
+        config: load_config()로 읽은 config 딕셔너리
+
+    Returns:
+        rf : RandomForest 모델
+        lr : LinearRegression 모델
+    """
+    rf = load_model("randomforest", config)
+    lr = load_model("linearregression", config)
+    return rf, lr
+
+def load_residual_models(config: dict):
+    """
+    Residual Learning에 필요한 모델 2개 로드
+    (RF + LR residual)
+
+    Args:
+        config: load_config()로 읽은 config 딕셔너리
+
+    Returns:
+        rf : RandomForest 모델 (energy_kwh 예측)
+        lr : LinearRegression 모델 (RF 오차 보정)
+    """
+    rf = load_model("randomforest", config)
+    lr = load_model("linearregression", config)
+    return rf, lr
+
+def load_rf_hourly(config: dict):
+    """
+    hourly aggregation 기반 RF 모델 로드
+    (target=power_w, features=cpu, memory, hour)
+
+    Args:
+        config: load_config()로 읽은 config 딕셔너리
+
+    Returns:
+        rf: RandomForest 모델 (power_w 예측)
+    """
+    rf = load_model("rf_hourly", config)
+    return rf

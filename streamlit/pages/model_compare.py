@@ -90,11 +90,17 @@ st.markdown("### 📋 성능 지표 테이블")
 #     ),
 #     use_container_width=True
 # )
+numeric_cols = ["rmse", "mae", "r2", "mape", "train_time_s"]
+for col in numeric_cols:
+    if col in df_metrics.columns:
+        df_metrics[col] = pd.to_numeric(df_metrics[col], errors="coerce")
+
 styled_df = (
     df_metrics.style
     .highlight_min(subset=["rmse", "mae", "mape"], color="#6CC08A")
     .highlight_max(subset=["r2"], color="#b0eec6")
 )
+
 st.dataframe(styled_df, use_container_width=True)
 
 st.divider()

@@ -10,8 +10,8 @@ from datetime import datetime
 import sys
 import os
 import streamlit as st
-from utils.loader import load_config, load_model, load_best_model
-from utils.predictor import calc_energy_by_formula, predict_energy_by_model, energy_to_analogy 
+from utils.loader import load_config, load_model, load_best_model, load_stacking_models, load_residual_models, load_rf_hourly
+from utils.predictor import calc_energy_by_formula, predict_energy_by_model, energy_to_analogy, predict_energy_by_stacking, predict_energy_by_residual, predict_energy_by_rf_hourly
 
 st.set_page_config(page_title="에너지 예측기 | EcoTracing", page_icon="🔋", layout="wide")
 
@@ -137,10 +137,18 @@ st.divider()
 st.markdown("### 🤖 모델 기반 예측")
 
 try:
-    model = load_best_model(config)
-    model_pred = predict_energy_by_model(model, cpu_usage, memory_usage, duration_h, hour)
+    # model = load_best_model(config)
+    # rf, lr, meta_model = load_stacking_models(config)
+    # rf, lr = load_residual_models(config)
+    # model_pred = predict_energy_by_stacking(rf, lr, meta_model, cpu_usage, memory_usage, duration_h)
+    # model_pred = predict_energy_by_residual(rf, lr, cpu_usage, memory_usage, duration_h)
+    # model_pred = predict_energy_by_model(model, cpu_usage, memory_usage, duration_h)
     # model_pred = predict_energy_by_model(model, cpu_usage, memory_usage, duration_sec, hour)
 
+    rf = load_rf_hourly(config)
+    print(config["model"]["model_names"])
+    model_pred = predict_energy_by_rf_hourly(rf, cpu_usage, memory_usage, duration_h)
+    
     st.success(
         f"**Best Model 예측값**: `{model_pred:.8f} kWh` "
         f"| **공식 계산값**: `{formula_result['energy_kwh']:.8f} kWh`"
@@ -161,12 +169,12 @@ st.divider()
 st.markdown("### 📐 사용된 공식")
 st.code(
     f"""
-CPU 사용률  : {cpu_usage*100:.0f}%  →  {cpu_usage}
-메모리 사용률: {memory_usage*100:.0f}%  →  {memory_usage}
+CPU 사용률  : {cpu_usage * 100:.0f}%  →  {cpu_usage}
+메모리 사용률: {memory_usage * 100:.0f}%  →  {memory_usage}
 측정 시간   : {duration_min}분  →   {formula_result['duration_h']:.6f}h
 
 전력 (W) = 200 + ({cpu_usage} x 300) + ({memory_usage} x 50)
-              = 200 + {cpu_usage*300:.1f} + {memory_usage*50:.1f}
+              = 200 + {cpu_usage * 300:.1f} + {memory_usage * 50:.1f}
               = {formula_result['power_w']} W
 
 에너지 (kWh) = {formula_result['power_w']} W x {formula_result['duration_h']:.6f} h / 1000

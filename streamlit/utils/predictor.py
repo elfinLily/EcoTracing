@@ -56,7 +56,7 @@ def calc_energy_by_formula(
         "carbon_kg": round(carbon_kg, 8),
     }
 
-def predict_energy_by_model(model, cpu_usage, memory_usage, duration_h, hour):
+def predict_energy_by_model(model, cpu_usage, memory_usage, duration_h):
     """
     학습된 모델로 에너지 소비량 예측
 
@@ -65,7 +65,6 @@ def predict_energy_by_model(model, cpu_usage, memory_usage, duration_h, hour):
         cpu_usage : CPU 사용률 (0.0 ~ 1.0)
         memory_usage : 메모리 사용률 (0.0 ~ 1.0)
         duration_h  : 측정 시간 (시간) - UI 입력값
-        hour  : 현재 시간대 (0 ~ 23)
 
     Returns:
         예측된 에너지 소비량 (kWh)
@@ -73,8 +72,8 @@ def predict_energy_by_model(model, cpu_usage, memory_usage, duration_h, hour):
     # 학습 데이터와 동일한 단위(초)로 변환해서 그대로 전달
     # 모델이 이미 duration_sec 기반으로 energy_kwh를 학습했음
     features = pd.DataFrame(
-        [[cpu_usage, memory_usage, TRAIN_DURATION_SEC, hour]],
-        columns=["cpu", "memory", "duration", "hour"]
+        [[cpu_usage, memory_usage, TRAIN_DURATION_SEC]],
+        columns=["cpu", "memory", "duration"]
     )
 
     base_prediction = model.predict(features)[0]
@@ -109,3 +108,160 @@ def energy_to_analogy(energy_kwh: float) -> dict:
         "smartphone_charge": round(smartphone_charge, 2),
         "co2_grams": round(co2_grams, 4),
     }
+
+def predict_energy_by_stacking(rf, lr, meta_model, cpu_usage, memory_usage, duration_h):
+    """
+    Args:
+        rf, lr, meta_model : load_stacking_models()로 불러온 모델들
+        cpu_usage          : CPU 사용률 (0.0 ~ 1.0)
+        memory_usage       : 메모리 사용률 (0.0 ~ 1.0)
+        duration_h         : 측정 시간 (시간)
+
+    Note:
+        피처: power_w + duration
+        power_w = 200 + cpu*300 + memory*50 (전처리와 동일한 공식)
+        RF는 트리 기반 외삽 불가 -> 300초 고정 + 스케일링
+        LR은 선형 외삽 가능 -> duration_sec 직접 전달
+    """
+    duration_sec = duration_h * 3600
+
+    # power_w 계산 (전처리와 동일한 공식)
+    power_w = 200 + (cpu_usage * 300) + (memory_usage * 50)
+
+    # RF: duration=300 고정 + 스케일링
+    features_300 = pd.DataFrame(
+        [[power_w, TRAIN_DURATION_SEC]],
+        columns=["power_w", "duration"]
+    )
+    rf_pred = rf.predict(features_300)[0]
+    scale_factor = duration_sec / TRAIN_DURATION_SEC
+    rf_pred_scaled = rf_pred * scale_factor
+
+    # LR: duration_sec 직접 전달 (선형 외삽 가능)
+    features_full = pd.DataFrame(
+        [[power_w, duration_sec]],
+        columns=["power_w", "duration"]
+    )
+    lr_pred = lr.predict(features_full)[0]
+
+    # 메타모델로 최종 예측
+    meta_input = np.array([[rf_pred_scaled, lr_pred]])
+    prediction = meta_model.predict(meta_input)[0]
+
+    return round(float(prediction), 8)
+
+
+TRAIN_DURATION_MAX = 300.0
+MAX_DURATION = 3600.0
+TRAIN_DURATION_SEC = 300
+
+def dynamic_weight_rf(duration_sec: float) -> float:
+    """
+    duration에 따라 RF 가중치 동적 계산
+    - duration <= 300초 : RF = 1.0
+    - 300 < duration <= 3600초: 선형 감소
+    - duration > 3600초 : LR = 1.0
+    """
+    if duration_sec <= TRAIN_DURATION_MAX:
+        return 1.0
+    return max(0.0, 1.0 - (duration_sec - TRAIN_DURATION_MAX) / (MAX_DURATION - TRAIN_DURATION_MAX))
+
+
+def predict_energy_by_dynamic_blending(rf, lr, cpu_usage, memory_usage, duration_h):
+    """
+    Dynamic Weighted Blending으로 에너지 예측
+
+    Args:
+        rf  : RandomForest 모델
+        lr  : LinearRegression 모델
+        cpu_usage  : CPU 사용률 (0.0 ~ 1.0)
+        memory_usage : 메모리 사용률 (0.0 ~ 1.0)
+        duration_h   : 측정 시간 (시간)
+
+    Returns:
+        예측된 에너지 소비량 (kWh)
+    """
+    duration_sec = duration_h * 3600
+    rf_w = dynamic_weight_rf(duration_sec)
+    lr_w = 1.0 - rf_w
+
+    features = pd.DataFrame(
+        [[cpu_usage, memory_usage, duration_sec]],
+        columns=["cpu", "memory", "duration"]
+    )
+
+    # RF: 300초 고정 + 스케일링
+    features_300 = features.copy()
+    features_300['duration'] = TRAIN_DURATION_SEC
+    rf_pred = rf.predict(features_300)[0] * (duration_sec / TRAIN_DURATION_SEC)
+
+    # LR: duration 직접 전달
+    lr_pred = lr.predict(features)[0]
+
+    prediction = rf_w * rf_pred + lr_w * lr_pred
+    return round(float(prediction), 8)
+
+def predict_energy_by_residual(rf, lr, cpu_usage, memory_usage, duration_h):
+    """
+    Residual Learning으로 에너지 예측
+    최종 예측 = RF 예측 + LR이 예측한 RF 오차
+
+    Args:
+        rf         : RandomForest 모델
+        lr         : LinearRegression 모델
+        cpu_usage  : CPU 사용률 (0.0 ~ 1.0)
+        memory_usage : 메모리 사용률 (0.0 ~ 1.0)
+        duration_h   : 측정 시간 (시간)
+
+    Returns:
+        예측된 에너지 소비량 (kWh)
+
+    Note:
+        RF는 트리 기반 외삽 불가 -> 300초 고정 + 스케일링
+        LR은 RF의 오차를 duration 직접 넘겨서 보정
+    """
+    duration_sec = duration_h * 3600
+
+    features_300 = pd.DataFrame(
+        [[cpu_usage, memory_usage, TRAIN_DURATION_SEC]],
+        columns=["cpu", "memory", "duration"]
+    )
+    features_full = pd.DataFrame(
+        [[cpu_usage, memory_usage, duration_sec]],
+        columns=["cpu", "memory", "duration"]
+    )
+
+    # RF: 300초 고정 + 스케일링
+    rf_pred = rf.predict(features_300)[0] * (duration_sec / TRAIN_DURATION_SEC)
+
+    # LR: RF 오차 보정 (duration 직접 전달)
+    lr_pred = lr.predict(features_full)[0]
+
+    prediction = rf_pred + lr_pred
+    return round(float(prediction), 8)
+
+def predict_energy_by_rf_hourly(rf, cpu_usage, memory_usage, duration_h):
+    """
+    hourly RF 모델로 에너지 예측
+    피처: cpu, memory, duration, hour
+    타겟: energy_kwh (직접 예측)
+
+    Args:
+        rf  : hourly RF 모델
+        cpu_usage  : CPU 사용률 (0.0 ~ 1.0)
+        memory_usage : 메모리 사용률 (0.0 ~ 1.0)
+        duration_h : 측정 시간 (시간)
+    """
+    from datetime import datetime
+    hour = datetime.now().hour
+    duration_sec = duration_h * 3600
+
+    # 피처 4개: cpu, memory, duration, hour
+    feat = pd.DataFrame(
+        [[cpu_usage, memory_usage, duration_sec, hour]],
+        columns=["cpu", "memory", "duration", "hour"]
+    )
+
+    # energy_kwh 직접 예측 (power_w 변환 불필요)
+    prediction = rf.predict(feat)[0]
+    return round(float(prediction), 8)
