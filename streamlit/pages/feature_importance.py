@@ -19,6 +19,9 @@ config = load_config("config/config.yaml")
 
 st.title("🔍 피처 중요도 (Feature Importance)")
 st.markdown("Phase 1 모델에서 에너지 예측에 가장 영향을 미치는 피처 분석")
+st.info("💡 **현재 최종 모델(MLP)은 Feature Importance를 제공하지 않아요.** "
+        "아래 차트는 기본 4개 모델(RF, LightGBM, XGBoost, CatBoost) 기준의 피처 중요도입니다. "
+        "MLP는 모든 피처를 가중치로 학습하므로 별도의 해석 방법(SHAP 등)이 필요해요.")
 st.divider()
 
 try:
