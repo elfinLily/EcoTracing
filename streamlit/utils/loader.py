@@ -181,3 +181,42 @@ def load_rf_hourly(config: dict):
     """
     rf = load_model("rf_hourly", config)
     return rf
+
+def load_mlp_model(config: dict):
+    """
+    MLP 모델 + 스케일러 로드
+
+    Args:
+        config: load_config()로 읽은 config 딕셔너리
+
+    Returns:
+        model : EnergyMLP 모델
+        scaler_X : 입력 피처 스케일러
+        scaler_y : 타겟 스케일러
+    """
+    import torch
+    import pickle
+    import sys
+    import os
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+    from models.mlp import EnergyMLP 
+
+    MODEL_PATH = f"{config['paths']['models']}"
+
+    mlp_file = os.path.join(MODEL_PATH, config['model']['model_names']['mlp'])
+    scaler_X_file = os.path.join(MODEL_PATH, config['model']['model_names']['scaler_x'])
+    scaler_y_file = os.path.join(MODEL_PATH, config['model']['model_names']['scaler_y'])
+
+    # MLP 모델 로드
+    input_size = config['model']['mlp_input_size']
+    model = EnergyMLP(input_size=input_size, hidden_sizes=[512, 256, 128], dropout_rate=0.0)
+    model.load_state_dict(torch.load(mlp_file, map_location='cpu'))
+    model.eval()
+
+    # 스케일러 로드
+    with open(scaler_X_file, 'rb') as f:
+        scaler_X = pickle.load(f)
+    with open(scaler_y_file, 'rb') as f:
+        scaler_y = pickle.load(f)
+
+    return model, scaler_X, scaler_y

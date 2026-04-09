@@ -10,8 +10,8 @@ from datetime import datetime
 import sys
 import os
 import streamlit as st
-from utils.loader import load_config, load_model, load_best_model, load_stacking_models, load_residual_models, load_rf_hourly
-from utils.predictor import calc_energy_by_formula, predict_energy_by_model, energy_to_analogy, predict_energy_by_stacking, predict_energy_by_residual, predict_energy_by_rf_hourly
+from utils.loader import load_config, load_model, load_best_model, load_stacking_models, load_residual_models, load_rf_hourly, load_mlp_model
+from utils.predictor import calc_energy_by_formula, predict_energy_by_model, energy_to_analogy, predict_energy_by_stacking, predict_energy_by_residual, predict_energy_by_rf_hourly, predict_energy_by_mlp, predict_energy_by_mlp_hourly
 
 st.set_page_config(page_title="에너지 예측기 | EcoTracing", page_icon="🔋", layout="wide")
 
@@ -145,9 +145,11 @@ try:
     # model_pred = predict_energy_by_model(model, cpu_usage, memory_usage, duration_h)
     # model_pred = predict_energy_by_model(model, cpu_usage, memory_usage, duration_sec, hour)
 
-    rf = load_rf_hourly(config)
-    print(config["model"]["model_names"])
-    model_pred = predict_energy_by_rf_hourly(rf, cpu_usage, memory_usage, duration_h)
+    # rf = load_rf_hourly(config)
+    # print(config["model"]["model_names"])
+    # model_pred = predict_energy_by_rf_hourly(rf, cpu_usage, memory_usage, duration_h)
+    model, scaler_X, scaler_y = load_mlp_model(config)
+    model_pred = predict_energy_by_mlp(model, scaler_X, scaler_y, cpu_usage, memory_usage, duration_h)
     
     st.success(
         f"**Best Model 예측값**: `{model_pred:.8f} kWh` "

@@ -265,3 +265,76 @@ def predict_energy_by_rf_hourly(rf, cpu_usage, memory_usage, duration_h):
     # energy_kwh 직접 예측 (power_w 변환 불필요)
     prediction = rf.predict(feat)[0]
     return round(float(prediction), 8)
+
+def predict_energy_by_mlp(model, scaler_X, scaler_y, cpu_usage, memory_usage, duration_h):
+    """
+    MLP 모델로 에너지 예측
+
+    Args:
+    model : EnergyMLP 모델 (load_mlp_model()로 로드)
+    scaler_X  : 입력 피처 스케일러 (StandardScaler)
+    scaler_y : 타겟 스케일러 (StandardScaler)
+    cpu_usage : CPU 사용률 (0.0 ~ 1.0)
+    memory_usage : 메모리 사용률 (0.0 ~ 1.0)
+    duration_h : 측정 시간 (시간)
+
+    Returns:
+        예측된 에너지 소비량 (kWh)
+    """
+    import torch
+    import numpy as np
+
+    duration_sec = duration_h * 3600
+
+    # 피처 배열 생성 (cpu, memory, duration)
+    X = np.array([[cpu_usage, memory_usage, duration_sec]], dtype=np.float32)
+
+    # 정규화
+    X_scaled = scaler_X.transform(X)
+    X_tensor = torch.tensor(X_scaled, dtype=torch.float32)
+
+    # 예측
+    model.eval()
+    with torch.no_grad():
+        y_pred_scaled = model(X_tensor).numpy()
+
+    # 역정규화
+    prediction = scaler_y.inverse_transform(y_pred_scaled)[0][0]
+    return round(float(prediction), 8)
+
+def predict_energy_by_mlp_hourly(model, scaler_X, scaler_y, cpu_usage, memory_usage, duration_h):
+    """
+    Hourly MLP 모델로 에너지 예측
+    피처: cpu, memory, duration, hour (4개)
+    타겟: energy_kwh (직접 예측)
+
+    Args:
+        model : EnergyMLP 모델 (input_size=4)
+        scaler_X : 입력 피처 스케일러 (StandardScaler, 4개 피처)
+        scaler_y : 타겟 스케일러 (StandardScaler)
+        cpu_usage : CPU 사용률 (0.0 ~ 1.0)
+        memory_usage : 메모리 사용률 (0.0 ~ 1.0)
+        duration_h  : 측정 시간 (시간)
+    """
+    import torch
+    import numpy as np
+    from datetime import datetime
+
+    hour = datetime.now().hour
+    duration_sec = duration_h * 3600
+
+    # 피처 4개: cpu, memory, duration, hour
+    X = np.array([[cpu_usage, memory_usage, duration_sec, hour]], dtype=np.float32)
+
+    # 정규화
+    X_scaled = scaler_X.transform(X)
+    X_tensor = torch.tensor(X_scaled, dtype=torch.float32)
+
+    # 예측
+    model.eval()
+    with torch.no_grad():
+        y_pred_scaled = model(X_tensor).numpy()
+
+    # 역정규화
+    prediction = scaler_y.inverse_transform(y_pred_scaled)[0][0]
+    return round(float(prediction), 8)

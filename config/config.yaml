@@ -32,6 +32,7 @@ model:
     scaler_x: "energy_scaler_x.pkl"
     scaler_y: "energy_scaler_y.pkl"
     rf_hourly: "energy_model_rf_hourly.pkl" 
+  mlp_input_size: 3
   best_model: "residual_learning"
   features: ["cpu", "memory", "duration", "hour"]
   results:
