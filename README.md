@@ -1,12 +1,14 @@
 # EcoTracing
 
-> Data Center Energy Consumption & Carbon Emission Prediction
+> Data Center Energy Consumption Prediction & Carbon Emission Estimation
 
 ---
 
 ## Overview
 
-EcoTracing is a machine learning project that predicts data center energy consumption and estimates carbon emissions from cloud computing workloads. Using Google Cluster Trace 2019 data, we build models to understand the environmental impact of large-scale computing infrastructure.
+EcoTracing is a machine learning research project that predicts data center energy consumption from CPU/Memory usage patterns and estimates carbon emissions from cloud computing workloads.
+
+Using **Google Cluster Trace 2019** data (~20M samples), we benchmark multiple ML models and progressively improve extrapolation performance — a key challenge when training data duration (5-min intervals) differs from real-world inference conditions (hourly input).
 
 ---
 
@@ -14,22 +16,24 @@ EcoTracing is a machine learning project that predicts data center energy consum
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| Phase 1 | Energy consumption prediction from CPU/Memory usage | ✅ Complete |
-| Phase 1.5 | Streamlit dashboard for Phase 1 visualization | ✅ Complete |
-| Phase 2 | Energy (kWh) to Carbon emission (kg CO2) conversion | 🔜 Planned |
+| Phase 1 | Energy consumption prediction from CPU/Memory usage | ✅ In Progress |
+| Phase 2 | Energy → Carbon emission conversion | 🔜 Planned |
 | Phase 3 | AI training/inference carbon footprint analysis | 🔜 Planned |
 
 ---
 
 ## Tech Stack
 
-- **Language**: Python 3.10+
-- **Environment**: Google Colab (L4 GPU) + VS Code Colab Extension
-- **ML Models**: RandomForest, LightGBM, XGBoost, CatBoost, LinearRegression
-- **Ensemble**: Stacking (RF + LR -> Meta LinearRegression)
-- **Dashboard**: Streamlit + Plotly
-- **Data**: Google Cluster Trace 2019
-- **Storage**: Google Drive (data), GitHub (code)
+| Category | Tools |
+|----------|-------|
+| Language | Python 3.10+ |
+| Environment | Google Colab (A100 GPU) |
+| ML Framework | scikit-learn, PyTorch |
+| Models | LightGBM, XGBoost, RandomForest, CatBoost, MLP |
+| Data | Google Cluster Trace 2019 |
+| Visualization | Matplotlib, Seaborn, Plotly |
+| Dashboard | Streamlit |
+| Storage | Google Drive |
 
 ---
 
@@ -39,33 +43,43 @@ EcoTracing is a machine learning project that predicts data center energy consum
 EcoTracing/
 ├── README.md
 ├── .gitignore
+├── requirements.txt
 ├── config/
-│   └── config.yaml                    # Project config
-├── docs/
-│   └── methodology/
-│       └── energy_formula.md          # Energy formula reference
+│   └── config.yaml
 ├── notebooks/
-│   ├── 01_data_download.ipynb         # Download Google Cluster Trace
-│   ├── 02_eda.ipynb                   # Exploratory Data Analysis
-│   ├── 03_preprocessing.ipynb         # Feature engineering (full dataset)
-│   ├── 04_modeling.ipynb              # Multi-model training
-│   ├── 05_evaluation.ipynb            # Evaluation & visualization
-│   └── 06_ensemble.ipynb              # Stacking ensemble (RF + LR)
+│   ├── 01_data_download.ipynb
+│   ├── 02_eda.ipynb
+│   ├── 03_preprocessing.ipynb
+│   ├── 04_modeling.ipynb
+│   ├── 05_evaluation.ipynb
+│   ├── 08_deep_learning.ipynb          # MLP baseline
+│   ├── 09_preprocessing_hourly.ipynb   # Hourly aggregation
+│   ├── 10_modeling_hourly.ipynb        # RF (hourly)
+│   ├── 12_modeling_hourly_log.ipynb    # RF (hourly + log transform)
+│   ├── 13_mlp_hourly.ipynb             # MLP (hourly + augmentation)
+│   ├── 14_stacking_mlp_rf.ipynb        # MLP + RF Stacking
+│   └── 15_residual_mlp.ipynb           # Residual MLP (final)
 ├── streamlit/
-│   ├── app.py                         # Main entry point
-│   ├── utils/
-│   │   ├── __init__.py
-│   │   ├── loader.py                  # Config/model/data loader
-│   │   └── predictor.py               # Energy prediction logic
-│   └── pages/
-│       ├── predictor.py               # Real-time energy predictor
-│       ├── eda.py                     # EDA visualization
-│       ├── model_compare.py           # Model comparison charts
-│       └── feature_importance.py      # Feature importance charts
-├── models/                            # Trained models (Google Drive)
-└── data/ (Google Drive)
-    ├── raw/                           # Google Cluster Trace raw files
-    └── processed/                     # Preprocessed parquet files
+│   ├── app.py
+│   ├── config/
+│   │   └── config.yaml
+│   ├── models/
+│   ├── pages/
+│   │   ├── predictor.py
+│   │   ├── eda.py
+│   │   ├── model_compare.py
+│   │   └── feature_importance.py
+│   └── utils/
+│       ├── __init__.py
+│       ├── loader.py
+│       └── predictor.py
+├── models/
+├── outputs/
+│   ├── figures/
+│   └── reports/
+└── data/
+    ├── raw/
+    └── processed/
 ```
 
 ---
@@ -75,64 +89,81 @@ EcoTracing/
 **Google Cluster Trace 2019**
 - Source: https://github.com/google/cluster-data
 - Data: `instance_usage` (CPU/Memory usage per instance)
-- Samples: 19,523,808 rows (5 files)
-- Train/Test: 15,619,046 / 3,904,762 (80/20 split)
+- Samples: ~19.5M rows (5 files)
 
 ---
 
-## Energy Calculation Formula
+## Energy Formula
 
 ```
-Power (W)   = 200 + (CPU_usage * 300) + (Memory_usage * 50)
-Energy (kWh) = Power (W) * Duration (h) / 1000
+Power (W)   = 200 + (CPU_usage × 300) + (Memory_usage × 50)
+Energy (kWh) = Power (W) × Duration (h) / 1000
 ```
 
-| Parameter | Value | Reference |
-|-----------|-------|-----------|
-| Base Power | 200W | Barroso & Holzle (2009), Fan et al. (2007) |
-| CPU Max | 300W | Intel Xeon / AMD EPYC TDP |
-| Memory Max | 50W | Lefurgy et al. (2003) |
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| Base Power | 200W | Idle server power (SPECpower benchmark) |
+| CPU Max | 300W | Additional power at 100% CPU (Intel Xeon / AMD EPYC) |
+| Memory Max | 50W | Additional power at 100% Memory (DDR4 DIMM) |
 
 ---
 
-## Features
+## Model Experiments (Phase 1)
 
-| Feature | Type | Description | Importance |
-|---------|------|-------------|------------|
-| **cpu** | float | CPU usage ratio (0~1) | 2nd (41%) |
-| **memory** | float | Memory usage ratio (0~1) | 3rd (8%) |
-| **duration** | float | Measurement duration (seconds) | 1st (51%) |
+### Core Challenge
+Training data has `duration` fixed at ~300s (5-min intervals), while Streamlit inference uses 1-hour inputs → RandomForest cannot extrapolate beyond training range.
 
-> Note: `hour` feature was removed (importance < 1%)
+**Test Condition**: CPU=50%, Memory=30%, Duration=1h → Formula Reference: **0.365 kWh**
 
----
+| # | Method | Train MAPE | Extrapolation Error | Note |
+|---|--------|------------|---------------------|------|
+| 1 | RF (baseline) | 0.07% | 74.6% | Cannot extrapolate |
+| 2 | RF+LR Stacking (depth=10) | 0.63% | 32.0% | |
+| 3 | RF+LR Stacking (depth=15) | 0.059% | 26.6% | |
+| 4 | Augmentation + Stacking | 0.63% | 28.3% | Worse |
+| 5 | Augmentation + Retuning | 0.059% | 26.5% | |
+| 6 | power_w feature | — | 53.2% | Worse |
+| 7 | MLP (basic) | 26.93% | ~26% | |
+| 8 | Residual Learning (RF→LR) | 0.343% | — | |
+| 9 | Dynamic Weighted Blending | 0.143% | > RF | |
+| 10 | **MLP (5min original)** | **2.18%** | **13.2%** | Best so far |
+| 11 | Hourly Aggregation + MLP | — | > MLP | Aggregation hurts |
+| 12 | RF (hourly + log transform) | — | — | |
+| 13 | MLP (hourly + augmentation) | 1.37% | > MLP | |
+| 14 | MLP + RF Stacking | 0.063% | ~RF level | Meta LR → RF dominated |
+| **15** | **Residual MLP** | — | **0.33%** | **✅ Final Model** |
 
-## Model Performance
+### Final Model: Residual MLP
 
-### Phase 1 - Single Models
+```
+y_final = y_formula(cpu, memory, duration) + MLP_pred_residual
+```
 
-| Rank | Model | RMSE | R2 | MAPE | Train Time |
+- MLP learns the residual between actual and formula value
+- Since training data is formula-derived, residual ≈ 0
+- At inference (1h input): y_formula dominates → near-zero extrapolation error
+- **Extrapolation error improved from 74.6% → 0.33% (98% improvement)**
+
+### Base Model Performance (Phase 1)
+
+| Rank | Model | RMSE | R² | MAPE | Train Time |
 |------|-------|------|-----|------|------------|
-| 1 | RandomForest | 1.38e-05 | 0.99999 | 0.07% | 470s |
-| 2 | LightGBM | 3.42e-05 | 0.99997 | 0.15% | 42s |
-| 3 | CatBoost | 4.31e-05 | 0.99995 | 0.79% | 78s |
+| 🥇 | RandomForest | 1.38e-05 | 0.99999 | 0.07% | 470s |
+| 🥈 | LightGBM | 3.42e-05 | 0.99997 | 0.15% | 42s |
+| 🥉 | CatBoost | 4.31e-05 | 0.99995 | 0.79% | 78s |
 | 4 | XGBoost | 5.67e-05 | 0.99992 | 2.78% | 66s |
 
-### Phase 1 - Ensemble (Stacking)
+---
 
-| Model | RMSE | MAPE | Error vs Formula |
-|-------|------|------|-----------------|
-| RF only | 1.38e-05 | 0.07% | ~75% |
-| **Stacking (RF+LR)** | **1.3e-05** | **0.63%** | **~32%** |
+## Training Environment
 
-> Stacking reduced extrapolation error by 57% compared to RF alone.
-
-**Why Stacking?**
-- RandomForest: Cannot extrapolate beyond training range (max 300s duration)
-- LinearRegression: Linear extrapolation for duration
-- Meta model learns optimal combination of both
-
-Reference: Zhang et al. (2019) - *Regression-Enhanced Random Forests*
+| Item | Spec |
+|------|------|
+| Platform | Google Colab |
+| GPU | NVIDIA A100 |
+| Runtime | Python 3.12 |
+| Storage | Google Drive (~TB) |
+| Data Volume | ~19.5M rows |
 
 ---
 
@@ -144,23 +175,65 @@ git clone https://github.com/elfinLily/EcoTracing.git
 cd EcoTracing
 ```
 
-### 2. Install Dependencies
-```bash
-pip install -r streamlit/requirements.txt
+### 2. Setup Google Colab
+- Open notebook in VS Code with Colab extension
+- Connect to A100 GPU runtime
+- Mount Google Drive
+
+### 3. Create config.yaml
+```python
+config_content = """
+project_name: "EcoTracing"
+
+paths:
+  raw_data: "raw"
+  processed_data: "data/processed"
+  models: "models"
+  outputs: "outputs"
+
+data:
+  source: "google_cluster_trace"
+  sample_size: 100000
+
+model:
+  type: "lightgbm"
+  random_state: 42
+  test_size: 0.2
+  model_names:
+    lightgbm: "energy_model_lightgbm.pkl"
+    xgboost: "energy_model_xgboost.pkl"
+    randomforest: "energy_model_randomforest.pkl"
+    catboost: "energy_model_catboost.pkl"
+    mlp: "energy_model_mlp.pkl"
+    mlp_residual: "energy_model_mlp_residual.pkl"
+    scaler_x: "scaler_x.pkl"
+    scaler_y: "scaler_y.pkl"
+    scaler_x_residual: "scaler_x_residual.pkl"
+  results:
+    metrics_csv: "phase1_metrics.csv"
+    results_json: "phase1_full_results.json"
+    feature_importance_csv: "feature_importance_comparison.csv"
+
+carbon:
+  emission_factor: 0.5
+"""
+with open("/content/config.yaml", "w") as f:
+    f.write(config_content)
 ```
 
-### 3. Run Streamlit Dashboard
+### 4. Run Notebooks in Order
+```
+01 → 02 → 03 → 04 → 05 → 08 → 09 → 10 → 15
+```
+
+### 5. Run Streamlit Dashboard
 ```bash
-streamlit run streamlit/app.py
+cd streamlit
+streamlit run app.py
 ```
 
 ---
 
-## References
+## License
 
-- Barroso & Holzle (2009) - *The Datacenter as a Computer*
-- Fan et al. (2007) - *Power Provisioning for a Warehouse-sized Computer*
-- Lefurgy et al. (2003) - *Energy Management for Commercial Servers*
-- Zhang et al. (2019) - *Regression-Enhanced Random Forests*
-- SPECpower Committee - *SPECpower_ssj2008*
-- Google Cluster Trace 2019: https://github.com/google/cluster-data
+MIT License

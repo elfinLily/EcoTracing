@@ -9,9 +9,13 @@
 from datetime import datetime
 import sys
 import os
+from utils.loader import load_config
+from utils.predictor import calc_energy_by_formula, energy_to_analogy
+import torch
+import torch.nn as nn
+import numpy as np
+import pickle
 import streamlit as st
-from utils.loader import load_config, load_model, load_best_model, load_stacking_models, load_residual_models, load_rf_hourly, load_mlp_model
-from utils.predictor import calc_energy_by_formula, predict_energy_by_model, energy_to_analogy, predict_energy_by_stacking, predict_energy_by_residual, predict_energy_by_rf_hourly, predict_energy_by_mlp, predict_energy_by_mlp_hourly
 
 st.set_page_config(page_title="에너지 예측기 | EcoTracing", page_icon="🔋", layout="wide")
 
@@ -22,55 +26,34 @@ st.markdown("CPU / 메모리 사용률과 측정 시간을 입력하면 에너�
 st.divider()
 
 with st.sidebar:
-    st.markdown("## ⚙️ 입력값 설정")
+    st.markdown("## ⚙️  Input Settings")
 
     cpu_usage = st.slider(
-        label="CPU 사용률 (%)",
+        label="CPU Usage (%)",
         min_value=0,
         max_value=100,
         value=50,
         step=1,
-        help="서버의 CPU 사용률을 설정하세요 (0~100%)"
+        help="Set server CPU usage (0~100%)"
     ) / 100.0   # 0~1 범위로 변환
 
     memory_usage = st.slider(
-        label="메모리 사용률 (%)",
+        label="Memory Usage (%)",
         min_value=0,
         max_value=100,
         value=30,
         step=1,
-        help="서버의 메모리 사용률을 설정하세요 (0~100%)"
+        help="Set server memory usage (0~100%)"
     ) / 100.0   # 0~1 범위로 변환
 
-    duration_min = st.number_input(
-        label="측정 시간 (분)",
-        min_value=1,
-        max_value=1440,
-        value=60,
-        step=1,
-        help="에너지를 측정할 시간(분)을 입력하세요"
-    )
-    # duration_sec = duration_min * 60   # 초 단위로 변환
-
     duration_h = st.number_input(
-        label="측정 시간 (시간)",
-        min_value=0.1,
-        max_value=24.0,
-        value=1.0,
-        step=0.5,
-        help="에너지를 측정할 시간 (시간 단위)"
+            label="Duration (hours)",
+            min_value=0.1,
+            max_value=24.0,
+            value=1.0,
+            step=0.5,
+            help="Set measurement duration in hours"
     )
-
-    # duration_sec = duration_h * 3600
-
-    # hour = st.slider(
-    #     label="시간대 (0~23시)",
-    #     min_value=0,
-    #     max_value=23,
-    #     value=12,
-    #     step=1,
-    #     help="현재 시간대를 설정하세요"
-    # )
     
     hour = datetime.now().hour
 # ----------------------------------------
@@ -137,31 +120,84 @@ st.divider()
 st.markdown("### 🤖 모델 기반 예측")
 
 try:
-    # model = load_best_model(config)
-    # rf, lr, meta_model = load_stacking_models(config)
-    # rf, lr = load_residual_models(config)
-    # model_pred = predict_energy_by_stacking(rf, lr, meta_model, cpu_usage, memory_usage, duration_h)
-    # model_pred = predict_energy_by_residual(rf, lr, cpu_usage, memory_usage, duration_h)
-    # model_pred = predict_energy_by_model(model, cpu_usage, memory_usage, duration_h)
-    # model_pred = predict_energy_by_model(model, cpu_usage, memory_usage, duration_sec, hour)
+    # EnergyMLP 클래스 정의 (저장된 state_dict 구조와 동일)
+    class EnergyMLP(nn.Module):
+        def __init__(self, input_size=3, hidden_sizes=[512, 256, 128], dropout=0.0):
+            super().__init__()
+            layers = []
+            prev = input_size
+            for h in hidden_sizes:
+                layers += [nn.Linear(prev, h), nn.BatchNorm1d(h), nn.ReLU()]
+                if dropout > 0:
+                    layers.append(nn.Dropout(dropout))
+                prev = h
+            layers.append(nn.Linear(prev, 1))
+            self.network = nn.Sequential(*layers)
 
-    # rf = load_rf_hourly(config)
-    # print(config["model"]["model_names"])
-    # model_pred = predict_energy_by_rf_hourly(rf, cpu_usage, memory_usage, duration_h)
-    model, scaler_X, scaler_y = load_mlp_model(config)
-    model_pred = predict_energy_by_mlp(model, scaler_X, scaler_y, cpu_usage, memory_usage, duration_h)
-    
+        def forward(self, x):
+            return self.network(x).squeeze(1)
+
+    # config에서 파일명 읽기
+    mlp_path = os.path.join(config['paths']['models'], config['model']['model_names']['mlp_residual'])
+    scaler_x_path = os.path.join(config['paths']['models'], config['model']['model_names']['scaler_x_residual'])
+
+    # 모델 + 스케일러 로드
+    mlp = EnergyMLP(input_size=3, hidden_sizes=[512, 256, 128])
+    mlp.load_state_dict(torch.load(mlp_path, map_location='cpu'))
+    mlp.eval()
+
+    with open(scaler_x_path, 'rb') as f:
+        scaler_X = pickle.load(f)
+
+    # Residual 예측
+    # y_final = y_formula + MLP_residual
+    duration_sec = duration_h * 3600
+    X_infer = np.array([[cpu_usage, memory_usage, duration_sec]], dtype=np.float32)
+    X_infer_sc = scaler_X.transform(X_infer)
+    X_tensor = torch.tensor(X_infer_sc, dtype=torch.float32)
+
+    with torch.no_grad():
+        residual_pred = mlp(X_tensor).item()
+
+    model_pred = formula_result['energy_kwh'] + residual_pred
+
     st.success(
-        f"**Best Model 예측값**: `{model_pred:.8f} kWh` "
+        f"**Residual MLP 예측값**: `{model_pred:.8f} kWh` "
         f"| **공식 계산값**: `{formula_result['energy_kwh']:.8f} kWh`"
     )
 
     diff = abs(model_pred - formula_result["energy_kwh"])
-    st.caption(f"두 값의 차이: {diff:.8f} kWh")
+    st.caption(f"두 값의 차이(residual): {residual_pred:.8f} kWh")
 
 except FileNotFoundError as e:
-    # 모델 파일이 없으면 안내 메시지 표시
     st.warning(f"⚠️ 모델 파일이 없어서 공식 기반 계산만 표시했어요.\n\n`{e}`")
+
+# try:
+#     # model = load_best_model(config)
+#     # rf, lr, meta_model = load_stacking_models(config)
+#     # rf, lr = load_residual_models(config)
+#     # model_pred = predict_energy_by_stacking(rf, lr, meta_model, cpu_usage, memory_usage, duration_h)
+#     # model_pred = predict_energy_by_residual(rf, lr, cpu_usage, memory_usage, duration_h)
+#     # model_pred = predict_energy_by_model(model, cpu_usage, memory_usage, duration_h)
+#     # model_pred = predict_energy_by_model(model, cpu_usage, memory_usage, duration_sec, hour)
+
+#     # rf = load_rf_hourly(config)
+#     # print(config["model"]["model_names"])
+#     # model_pred = predict_energy_by_rf_hourly(rf, cpu_usage, memory_usage, duration_h)
+#     model, scaler_X, scaler_y = load_mlp_model(config)
+#     model_pred = predict_energy_by_mlp(model, scaler_X, scaler_y, cpu_usage, memory_usage, duration_h)
+    
+#     st.success(
+#         f"**Best Model 예측값**: `{model_pred:.8f} kWh` "
+#         f"| **공식 계산값**: `{formula_result['energy_kwh']:.8f} kWh`"
+#     )
+
+#     diff = abs(model_pred - formula_result["energy_kwh"])
+#     st.caption(f"두 값의 차이: {diff:.8f} kWh")
+
+# except FileNotFoundError as e:
+#     # 모델 파일이 없으면 안내 메시지 표시
+#     st.warning(f"⚠️ 모델 파일이 없어서 공식 기반 계산만 표시했어요.\n\n`{e}`")
 
 
 # ----------------------------------------
@@ -173,7 +209,7 @@ st.code(
     f"""
 CPU 사용률  : {cpu_usage * 100:.0f}%  →  {cpu_usage}
 메모리 사용률: {memory_usage * 100:.0f}%  →  {memory_usage}
-측정 시간   : {duration_min}분  →   {formula_result['duration_h']:.6f}h
+측정 시간   :  {formula_result['duration_h']:.6f}h
 
 전력 (W) = 200 + ({cpu_usage} x 300) + ({memory_usage} x 50)
               = 200 + {cpu_usage * 300:.1f} + {memory_usage * 50:.1f}

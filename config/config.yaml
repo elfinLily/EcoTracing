@@ -3,7 +3,7 @@ project_name: "EcoTracing"
 
 # Paths
 paths:
-  drive_data: "/content/drive/MyDrive/EcoTracing/data"
+  drive_data: "/content/drive/MyDrive/EcoTracing"
   raw_data: "raw"
   processed_data: "data/processed"
   local_drive_data: "G:\\내 드라이브\\EcoTracing\\data"
@@ -32,15 +32,20 @@ model:
     scaler_x: "energy_scaler_x.pkl"
     scaler_y: "energy_scaler_y.pkl"
     rf_hourly: "energy_model_rf_hourly.pkl" 
+    stacking_mlp_rf: "energy_model_stacking_mlp_rf.pkl"
+    mlp_residual    : "energy_model_mlp_residual.pkl"
+    scaler_x_residual: "scaler_x_residual.pkl"
   mlp_input_size: 3
   best_model: "residual_learning"
-  features: ["cpu", "memory", "duration", "hour"]
+  features: ["cpu", "memory", "duration"]
   results:
     metrics_csv: "phase1_metrics.csv"
     results_json: "phase1_full_results.json"
     feature_importance_csv: "feature_importance_comparison.csv"
     results_json_mlp: "phase1_full_results_mlp.json"
     results_json_hourly: "phase1_results_hourly.json"
+    results_json_stacking: "phase1_full_results_stacking.json"
+    results_json_residual: "phase1_full_results_residual.json"
 
 # Carbon
 carbon:

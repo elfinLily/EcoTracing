@@ -71,15 +71,22 @@ try:
         df_metrics = pd.concat([df_metrics, df_mlp], ignore_index=True)
 
 except FileNotFoundError:
-    st.info("phase1_metrics.csv가 없어서 Phase 1 실측 결과를 표시합니다.")
+    st.info("Result file not found. Showing Phase 1 experimental results.")
 
     df_metrics = pd.DataFrame([
-        {"model": "RandomForest", "rmse": 1.38e-5, "mae": 8.5e-6, "r2": 0.99999, "mape": 0.07, "train_time_s": 470},
-        {"model": "LightGBM", "rmse": 3.42e-5, "mae": 2.1e-5, "r2": 0.99997, "mape": 0.15, "train_time_s": 42},
-        {"model": "CatBoost", "rmse": 4.31e-5, "mae": 2.8e-5, "r2": 0.99995, "mape": 0.79, "train_time_s": 78},
-        {"model": "XGBoost", "rmse": 5.67e-5, "mae": 3.4e-5, "r2": 0.99992, "mape": 2.78, "train_time_s": 66},
-        {"model": "MLP", "rmse": 1.04e-4, "mae": 6.5e-5, "r2": 0.999998, "mape": 2.18, "train_time_s": 0},
+        # ── Phase 1 기본 모델 4개 ──────────────────────────────
+        {"model": "RandomForest", "rmse": 1.38e-5, "mae": 8.5e-6, "r2": 0.99999, "mape": 0.07, "train_time_s": 470, "note": "Baseline"},
+        {"model": "LightGBM", "rmse": 3.42e-5, "mae": 2.1e-5, "r2": 0.99997, "mape": 0.15, "train_time_s": 42, "note": "Baseline"},
+        {"model": "CatBoost", "rmse": 4.31e-5, "mae": 2.8e-5, "r2": 0.99995, "mape": 0.79, "train_time_s": 78, "note": "Baseline"},
+        {"model": "XGBoost", "rmse": 5.67e-5, "mae": 3.4e-5, "r2": 0.99992, "mape": 2.78, "train_time_s": 66, "note": "Baseline"},
+        # ── Phase 1 개선 실험 ──────────────────────────────────
+        {"model": "RF+LR Stacking", "rmse": 3.2e-6, "mae": 2.0e-6, "r2": 0.99999, "mape": 0.059, "train_time_s": 480, "note": "Improvement"},
+        {"model": "MLP (5min)", "rmse": 4.28e-4, "mae": 2.72e-4, "r2": 0.99996, "mape": 2.18, "train_time_s": 0, "note": "Improvement"},
+        {"model": "MLP+RF Stacking", "rmse": 1.32e-5, "mae": 7.61e-6, "r2": 0.99999558, "mape": 0.0632, "train_time_s": 0, "note": "Improvement"},
+        {"model": "Residual MLP ⭐", "rmse": 3.81e-4, "mae": 3.62e-4, "r2": 0.99631, "mape": 69.67, "train_time_s": 0, "note": "Best (Extrapolation)"},
     ])
+
+    st.caption("⭐ Residual MLP: MAPE는 높지만 Streamlit 1시간 외삽 오차 0.33% (최저)")
 
 st.markdown("### 📋 성능 지표 테이블")
 
